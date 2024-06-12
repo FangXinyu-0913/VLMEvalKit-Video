@@ -52,6 +52,24 @@ We use `run.py` for evaluation. To use the script, you can use `$VLMEvalKit/run.
 - `--model (list[str])`: Set the VLM names that are supported in VLMEvalKit (defined in `supported_VLM` in `vlmeval/config.py`).
 - `--mode (str, default to 'all', choices are ['all', 'infer'])`: When `mode` set to "all", will perform both inference and evaluation; when set to "infer", will only perform the inference.
 - `--nproc (int, default to 4)`: The number of threads for OpenAI API calling.
+- `--video-sample-frame-num (int, default to 8)`: The number of sampled frames from a video when evaluating video benchmark (like MMBench-Video).
+
+**Video benchmark Evaluation Command 🔥🔥🔥**
+
+You can run the script with `python`:
+
+```bash
+# GPT-4o on MMBench-Video, Inference and Evalution
+python run.py --data MMBench-Video --model GPT4o --verbose 
+# [Recommend🔥] GPT-4o on MMBench-Video, Inference and Evalution, with pack mode to pack multiple questions answered for one video (in order to save quota)  
+python run.py --data MMBench-Video --model GPT4o --verbose --pack
+# GPT-4o on MMBench-Video, Inference and Evalution, with pack mode and change video sample frame number
+python run.py --data MMBench-Video --model GPT4o --video-sample-frame-num 4 --verbose --pack 
+# GPT-4o on MMBench-Video, Inference and Evalution, with pack mode and change judge model (default is gpt-4-1106-preview)
+python run.py --data MMBench-Video --model GPT4o --video-sample-frame-num 4 --judge gpt-4-0125-preview --verbose --pack 
+```
+
+The evaluation results will be printed as logs, besides. **Result Files** will also be generated in the directory `$YOUR_WORKING_DIRECTORY/{model_name}`. Files ending with `.csv` contain the evaluated metrics.
 
 **Command**
 
@@ -65,6 +83,7 @@ You can run the script with `python` or `torchrun`:
 python run.py --data MMBench_DEV_EN MME SEEDBench_IMG --model idefics_80b_instruct --verbose
 # IDEFICS-80B-Instruct on MMBench_DEV_EN, MME, and SEEDBench_IMG, Inference only
 python run.py --data MMBench_DEV_EN MME SEEDBench_IMG --model idefics_80b_instruct --verbose --mode infer
+
 
 # When running with `torchrun`, one VLM instance is instantiated on each GPU. It can speed up the inference.
 # However, that is only suitable for VLMs that consume small amounts of GPU memory.

@@ -14,11 +14,13 @@ def parse_args():
     parser.add_argument('--work-dir', type=str, default='.', help='select the output directory')
     parser.add_argument('--mode', type=str, default='all', choices=['all', 'infer'])
     parser.add_argument('--nproc', type=int, default=4, help='Parallel API calling')
+    parser.add_argument('--video-sample-frame-num', type=int, default=8, help='Sample frame number for video dataset.')
     parser.add_argument('--retry', type=int, default=None, help='retry numbers for API VLMs')
     parser.add_argument('--judge', type=str, default=None)
     parser.add_argument('--ignore', action='store_true', help='Ignore failed indices. ')
     parser.add_argument('--verbose', action='store_true')
     parser.add_argument('--rerun', action='store_true')
+    parser.add_argument('--pack', action='store_true')
     args = parser.parse_args()
     return args
 
@@ -83,7 +85,9 @@ def main():
                 dataset_name=dataset_name,
                 verbose=args.verbose,
                 api_nproc=args.nproc,
-                ignore_failed=args.ignore)
+                ignore_failed=args.ignore,
+                pack=args.pack, 
+                video_sample_frame_num=args.video_sample_frame_num)
 
             if rank == 0:
                 if dataset_name in ['MMMU_TEST']:
@@ -146,6 +150,8 @@ def main():
                     MathVista_eval(result_file, **judge_kwargs)
                 elif listinstr(['LLaVABench'], dataset_name):
                     LLaVABench_eval(result_file, **judge_kwargs)
+                elif listinstr(['MMBench-Video'], dataset_name):
+                    MMBench_VIDEO_eval(result_file, **judge_kwargs)
                 else:
                     logger.error(f'Dataset {dataset_name} is not handled by evaluator, will be skipped. ')
 

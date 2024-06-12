@@ -19,10 +19,10 @@ def parse_args():
 
 
 # Only API model is accepted
-def infer_data_api(work_dir, model_name, dataset_name, index_set=None, api_nproc=4, ignore_failed=False):
+def infer_data_api(work_dir, model_name, dataset_name, index_set=None, api_nproc=4, ignore_failed=False, pack=False, video_sample_frame_num=8):
     rank, world_size = get_rank_and_world_size()
     assert rank == 0 and world_size == 1
-    dataset = TSVDataset(dataset_name)
+    dataset = TSVDataset(dataset_name, pack=pack)
     data = dataset.data
     if index_set is not None:
         data = data[data['index'].isin(index_set)]
@@ -30,8 +30,14 @@ def infer_data_api(work_dir, model_name, dataset_name, index_set=None, api_nproc
     model = supported_VLM[model_name]() if isinstance(model_name, str) else model_name
     assert getattr(model, 'is_api', False)
 
-    lt, indices = len(data), list(data['index'])
-    structs = [dataset.build_prompt(data.iloc[i]) for i in range(lt)]
+    # lt, indices = len(dataset), list(data['index'])
+    lt, indices = dataset.packed_length(), list(data['index'])
+    if listinstr(['MMBench-Video'], dataset_name):
+        structs = [dataset.build_prompt_for_video(i, video_sample_frame_num, api=True) for i in range(lt)]
+        indices = dataset.videos if pack else list(data['index'])
+        print(f'prompt for {dataset_name} is ready. {lt} prompts in total. {len(indices)} indices in total.')
+    else:
+        structs = [dataset.build_prompt(data.iloc[i]) for i in range(lt)]
 
     # Corner Case
     if listinstr(['MMMU'], dataset_name):
@@ -54,14 +60,43 @@ def infer_data_api(work_dir, model_name, dataset_name, index_set=None, api_nproc
     if len(structs):
         track_progress_rich(gen_func, structs, nproc=api_nproc, chunksize=api_nproc, save=out_file, keys=indices)
 
-    res = load(out_file)
-    if index_set is not None:
-        res = {k: v for k, v in res.items() if k in index_set}
-    os.remove(out_file)
+    org_res = load(out_file)
+    if listinstr(['MMBench-Video'], dataset_name) and pack:
+        res = {}
+        for k, v in org_res.items():
+            try:
+                v = v.replace('```json','').replace('```','')
+                answer_for_video = eval(v)
+                idx_list = data[data['video'] == k]['index'].tolist()
+                for id, (idx, ans) in enumerate(answer_for_video.items()):
+                    try:
+                        new_idx = int(idx)
+                    except:
+                        print(f'idx {idx} not int')
+                        new_idx = idx_list[id]
+
+                    if new_idx in idx_list:
+                        res[new_idx] = ans
+                    else:
+                        print(f'idx {new_idx} not in {idx_list}')
+                        res[idx_list[id]] = ans
+                
+            except Exception as e:
+                print(f'error:{e}, parse fail')
+                failed_idx_list = data[data['video'] == k]['index'].tolist()
+                res.update({idx: FAIL_MSG for idx in failed_idx_list})
+        
+        res = {int(k): v for k, v in res.items()}
+            
+    elif index_set is not None:
+        res = {k: v for k, v in org_res.items() if k in index_set}
+    else:
+        res = org_res
+    # os.remove(out_file)
     return res
 
 
-def infer_data(model_name, work_dir, dataset_name, out_file, verbose=False, api_nproc=4):
+def infer_data(model_name, work_dir, dataset_name, out_file, verbose=False, api_nproc=4, pack=True, video_sample_frame_num=8):
     prev_file = f'{work_dir}/{model_name}_{dataset_name}_PREV.pkl'
     res = load(prev_file) if osp.exists(prev_file) else {}
     if osp.exists(out_file):
@@ -69,10 +104,10 @@ def infer_data(model_name, work_dir, dataset_name, out_file, verbose=False, api_
 
     rank, world_size = get_rank_and_world_size()
     if rank == 0:
-        dataset = TSVDataset(dataset_name)
+        dataset = TSVDataset(dataset_name, pack=pack)
     if world_size > 1:
         dist.barrier()
-    dataset = TSVDataset(dataset_name)
+    dataset = TSVDataset(dataset_name, pack=pack)
 
     sheet_indices = list(range(rank, len(dataset), world_size))
     lt = len(sheet_indices)
@@ -85,6 +120,7 @@ def infer_data(model_name, work_dir, dataset_name, out_file, verbose=False, api_
         idx = data.iloc[i]['index']
         if idx not in res:
             all_finished = False
+            break
     if all_finished:
         res = {k: res[k] for k in data_indices}
         dump(res, out_file)
@@ -104,7 +140,9 @@ def infer_data(model_name, work_dir, dataset_name, out_file, verbose=False, api_
             model_name=model_name,
             dataset_name=dataset_name,
             index_set=set(indices),
-            api_nproc=api_nproc)
+            api_nproc=api_nproc,
+            pack=pack,
+            video_sample_frame_num=video_sample_frame_num)
         for idx in indices:
             assert idx in supp
         res.update(supp)
@@ -143,7 +181,7 @@ def infer_data(model_name, work_dir, dataset_name, out_file, verbose=False, api_
 
 
 # A wrapper for infer_data, do the pre & post processing
-def infer_data_job(model, work_dir, model_name, dataset_name, verbose=False, api_nproc=4, ignore_failed=False):
+def infer_data_job(model, work_dir, model_name, dataset_name, verbose=False, api_nproc=4, ignore_failed=False, pack=True, video_sample_frame_num=8):
     rank, world_size = get_rank_and_world_size()
     result_file = osp.join(work_dir, f'{model_name}_{dataset_name}.xlsx')
 
@@ -162,7 +200,7 @@ def infer_data_job(model, work_dir, model_name, dataset_name, verbose=False, api
     out_file = tmpl.format(rank)
 
     model = infer_data(
-        model, work_dir=work_dir, dataset_name=dataset_name, out_file=out_file, verbose=verbose, api_nproc=api_nproc)
+        model, work_dir=work_dir, dataset_name=dataset_name, out_file=out_file, verbose=verbose, api_nproc=api_nproc, pack=pack, video_sample_frame_num=video_sample_frame_num)
     if world_size > 1:
         dist.barrier()
 
@@ -171,7 +209,7 @@ def infer_data_job(model, work_dir, model_name, dataset_name, verbose=False, api
         for i in range(world_size):
             data_all.update(load(tmpl.format(i)))
 
-        data = TSVDataset(dataset_name).data
+        data = TSVDataset(dataset_name, pack=pack).data
         for x in data['index']:
             assert x in data_all
         data['prediction'] = [str(data_all[x]) for x in data['index']]

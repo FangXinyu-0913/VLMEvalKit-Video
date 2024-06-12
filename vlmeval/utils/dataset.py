@@ -71,7 +71,7 @@ def MMMU_result_transfer(result_path):
 
 class TSVDataset(CustomPrompt):
 
-    def __init__(self, dataset='MMBench', skip_noimg=True):
+    def __init__(self, dataset='MMBench', pack=True, skip_noimg=True):
 
         self.data_root = LMUDataRoot()
         assert osp.exists(self.data_root)
@@ -79,22 +79,35 @@ class TSVDataset(CustomPrompt):
         self.dataset = dataset
         self.dataset_type = DATASET_TYPE(dataset)
 
-        if dataset in dataset_URLs:
+        if dataset in dataset_URLs: 
             url = dataset_URLs[dataset]
             file_name = url.split('/')[-1]
             data_path = osp.join(self.data_root, file_name)
 
-            if osp.exists(data_path) and check_md5(data_path, dataset):
-                pass
-            else:
-                warnings.warn('The dataset tsv is not downloaded')
-                download_file(url, data_path)
+            if not url.startswith("https"): # huggingface repo id
+                if osp.exists(data_path) and check_md5(osp.join(data_path, dataset+'.tsv'), dataset):
+                    pass
+                else:
+                    warnings.warn(f'The dataset {dataset} is not downloaded')
+                    download_file_from_hf(url, data_path)
+                if listinstr(['MMBench-Video'], dataset):
+                    unwrap_hf_pkl(data_path)
+            else:    
+                if osp.exists(data_path) and check_md5(data_path, dataset):
+                    pass
+                else:
+                    warnings.warn('The dataset tsv is not downloaded')
+                    download_file(url, data_path)
         else:
             data_path = osp.join(self.data_root, dataset + '.tsv')
             assert osp.exists(data_path)
 
-        data = load(data_path)
+        if url.startswith("https"): # huggingface repo id
+            data = load(data_path)
+        else:
+            data = load(osp.join(data_path, dataset+'.tsv'))
         self.skip_noimg = skip_noimg
+        self.data_path = data_path
         if skip_noimg and 'image' in data:
             data = data[~pd.isna(data['image'])]
 
@@ -133,9 +146,30 @@ class TSVDataset(CustomPrompt):
             data['index'] = [int(x) for x in data['index']]
 
         self.data = data
+        if listinstr(['MMBench-Video'], dataset):
+            self.videos = list(set(data['video']))
+            self.SYS = "You are an AI assistant responsible for answering questions about videos."
+            self.FRAMES_TMPL = """
+You will be provided with {} separate frames uniformly sampled from a video, the frames are provided in chronological order of the video. 
+Please analyze these images and provide the answer / answers to the following question / questions about the video content.
+If multiple questions are provided (with indices I1, I2, I3, ...), you should organize your answers in the following json format:
+{{
+    'I1': 'Answer to Question I1', 
+    'I2': 'Answer to Question I2', 
+    ...
+}}
+Otherwise, please directly reply with your response to the only question. 
+Even if the information in these separate frames is not enough to give an answer, PLEASE TRY YOUR BEST TO GUESS A CLEAR OR VAGUE ANSWER WHICH YOU THINK WOULD BE THE MOST POSSIBLE ONE BASED ON THE QUESTION.
+Minimize negative responses such as 'not possible to determine'. STIMULATE YOUR POTENTIAL AND IMAGINATION!
+"""
+        self.pack = pack
+        
 
     def __len__(self):
         return len(self.data)
+    
+    def packed_length(self):
+        return len(self.data) if not self.pack else len(self.videos)
 
     def build_prompt(self, line, dataset=None):
         if dataset is None:
@@ -180,6 +214,36 @@ class TSVDataset(CustomPrompt):
         msgs.append(dict(type='text', value=prompt))
 
         return msgs
+
+    def build_prompt_for_video(self, line, sample_frame_num=8, api=True, dataset=None):
+        if dataset is None:
+            dataset = self.dataset
+
+        if isinstance(line, int):
+            if self.pack:
+                video = self.videos[line]
+                sub = self.data[self.data['video'] == video]
+            else:
+                line = self.data.iloc[line]
+                video = line['video']
+
+        frames = self.sample_image_from_video(video, dataset, sample_frame_num) # get video frames, not supplemented
+        sys_prompt = self.SYS + self.FRAMES_TMPL.format(sample_frame_num)
+        msgs = [dict(type='text', value=sys_prompt)]
+        for im in frames:
+            msgs.append(dict(type='image', value=im))
+        prompt = 'Questions: \n{}\nAnswers: \n'
+        if self.pack:
+            nq = len(sub)
+            qs = {int(sub.iloc[i]['index']): sub.iloc[i]['question'] for i in range(nq)}
+            prompt = prompt.format(json.dumps(qs))
+        else:
+            prompt = prompt.format(line['question'])
+        prompt = prompt.replace(u'\xa0', u' ')
+        msgs.append(dict(type='text', value=prompt))
+
+        return msgs
+
 
     def display(self, line):
         if isinstance(line, int):

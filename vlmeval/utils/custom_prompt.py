@@ -31,3 +31,25 @@ class CustomPrompt:
             if not read_ok(tgt_path):
                 decode_base64_to_image_file(line['image'], tgt_path)
         return tgt_path
+
+    def sample_image_from_video(self, video, dataset, sample_frame_num=8):
+        video_path = osp.join(self.data_path, f'video/{video}.mp4')
+        if osp.exists(video_path):
+            vid = decord.VideoReader(video_path)
+            step_size = len(vid) / (sample_frame_num + 1)
+            indices = [int(i * step_size) for i in range(1, sample_frame_num + 1)]
+            images = [vid[i].asnumpy() for i in indices]
+            images = [Image.fromarray(arr) for arr in images]
+
+            img_root = osp.join(self.data_path, 'images', video)
+            os.makedirs(img_root, exist_ok=True)
+            img_paths = [osp.join(img_root, f'{i}_{sample_frame_num}.jpg') for i in range(1, sample_frame_num + 1)]
+            for im, pth in zip(images, img_paths):
+                im.save(pth)
+
+            return img_paths
+        else:
+            raise FileNotFoundError(f"Video {video} not found")
+
+
+

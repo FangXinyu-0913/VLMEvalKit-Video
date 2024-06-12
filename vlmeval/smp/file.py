@@ -138,6 +138,22 @@ def download_file(url, filename=None):
         urllib.request.urlretrieve(url, filename=filename, reporthook=t.update_to)
     return filename
 
+def download_file_from_hf(repo_id, file_dir):
+    from huggingface_hub import snapshot_download
+    os.environ["HF_ENDPOINT"] = "https://hf-mirror.com" # for chinese mainland user
+    while True:
+        try:    
+            snapshot_download(
+                repo_id=repo_id,
+                local_dir=file_dir,
+                max_workers=8,
+                resume_download =True
+            )
+            break
+        except:
+            print('Download was interrupted, try to resume it')
+            pass
+
 
 def ls(dirname='.', match=[], mode='all', level=1):
     if isinstance(level, str):
@@ -227,3 +243,29 @@ def parse_file(s):
             return ('url', s)
     else:
         return (None, s)
+
+
+def unwrap_hf_pkl(dataset_root_dir, prefix='.mp4'):
+
+    base_dir = os.path.join(dataset_root_dir, 'video_pkl/')
+    target_dir = os.path.join(dataset_root_dir, 'video/')
+
+    pickle_files = [os.path.join(base_dir, file) for file in os.listdir(base_dir)]
+    if not os.path.exists(target_dir):
+        os.makedirs(target_dir, exist_ok=True)  
+        for pickle_file in pickle_files:
+
+            with open(pickle_file, 'rb') as file:
+                video_data = pickle.load(file)
+            
+            # For each video file in the pickle file, write its contents to a new mp4 file
+            for video_name, video_content in video_data.items():
+                
+                output_path = os.path.join(target_dir, f'{video_name}{prefix}')
+                
+                with open(output_path, 'wb') as output_file:
+                    output_file.write(video_content)
+
+        print("The video file has been restored and stored from the pickle file.")
+    else:
+        print("The video file already exists.")

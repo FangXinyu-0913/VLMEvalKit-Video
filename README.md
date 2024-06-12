@@ -25,6 +25,7 @@ English | [<a href="README_zh-CN.md">简体中文</a>]
 
 ## 🆕 News
 
+- **[2024-06-12]** We have released a preview version of VLMEvalKit, and supported [**MMBench-Video**](https://huggingface.co/datasets/nebulae09/MMBench-Video) for Proprietary LVLMs (like GPT-4o), you can follow [QuickStart](/Quickstart.md) for a quick start guide.
 - **[2024-05-27]** We have supported [**Mini InternVL**](https://huggingface.co/OpenGVLab/Mini-InternVL-Chat-2B-V1-5), thanks to [**czczup**](https://github.com/czczup)🔥🔥🔥
 - **[2024-05-25]** We have supported [**SEEDBench2_Plus**](https://arxiv.org/abs/2404.16790),  thanks to [**Bohao-Lee**](https://github.com/Bohao-Lee)🔥🔥🔥
 - **[2024-05-24]** We have supported [**Phi-3-Vision**](https://huggingface.co/microsoft/Phi-3-vision-128k-instruct) and [**CogVLM2-Llama3-chat**](https://huggingface.co/THUDM/cogvlm2-llama3-chat-19B) 🔥🔥🔥

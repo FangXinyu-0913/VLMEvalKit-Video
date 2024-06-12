@@ -7,3 +7,4 @@ from .mathvista_eval import MathVista_eval
 from .llavabench import LLaVABench_eval
 from .misc import build_judge
 from .OCRBench import OCRBench_eval
+from .mmbench_video_eval import MMBench_VIDEO_eval

@@ -44,6 +44,8 @@ dataset_URLs = {
     'MMStar': 'https://opencompass.openxlab.space/utils/VLMEval/MMStar.tsv',
     'RealWorldQA': 'https://opencompass.openxlab.space/utils/VLMEval/RealWorldQA.tsv',
     'POPE': 'https://opencompass.openxlab.space/utils/VLMEval/POPE.tsv',
+    # Video
+    'MMBench-Video': 'nebulae09/MMBench-Video', # huggingface dataset repo id
 }
 
 dataset_md5_dict = {
@@ -89,6 +91,8 @@ dataset_md5_dict = {
     'MMStar': 'e1ecd2140806c1b1bbf54b43372efb9e',
     'RealWorldQA': '92321028d2bc29040284b6674721e48f',
     'POPE': 'c12f5acb142f2ef1f85a26ba2fbe41d5',
+    # Video
+    'MMBench-Video': '75c828dfac2d74e5ba0232e96a81e032'
 }
 
 img_root_map = {k: k for k in dataset_URLs}
@@ -116,6 +120,7 @@ img_root_map.update({
     'MathVista_MINI': 'MathVista',
     'HallusionBench': 'Hallusion',
     'DocVQA_VAL': 'DocVQA',
+    'MMBench-Video': 'MMBVid'
 })
 
 assert set(dataset_URLs) == set(img_root_map)
@@ -124,7 +129,9 @@ assert set(dataset_URLs) == set(img_root_map)
 def DATASET_TYPE(dataset):
     # Dealing with Custom Dataset
     dataset = dataset.lower()
-    if listinstr(['mmbench', 'seedbench', 'ccbench', 'mmmu', 'scienceqa', 'ai2d', 'mmstar', 'realworldqa'], dataset):
+    if listinstr(['mmbench-video'], dataset):
+        return 'Video-QA'
+    elif listinstr(['mmbench', 'seedbench', 'ccbench', 'mmmu', 'scienceqa', 'ai2d', 'mmstar', 'realworldqa'], dataset):
         return 'multi-choice'
     elif listinstr(['mme', 'hallusion', 'pope'], dataset):
         return 'Y/N'
